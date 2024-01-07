@@ -3,7 +3,6 @@ import importlib
 from types import MethodType
 from functools import partial, wraps
 
-from multiprocess import Pool, cpu_count
 import numpy as np
 
 import SALib.sample as samplers
@@ -214,7 +213,7 @@ class ProblemSpec(dict):
         if self._samples is None:
             raise RuntimeError("Sampling not yet conducted")
 
-        max_procs = cpu_count()
+        max_procs = 1
         if nprocs is None:
             nprocs = max_procs
         else:
@@ -230,12 +229,21 @@ class ProblemSpec(dict):
         # Split into even chunks
         chunks = np.array_split(self._samples, int(nprocs), axis=0)
 
+        # if ptqdm_available:
+        #     # Display progress bar if available
+        #     res = p_imap(tmp_f, chunks, num_cpus=nprocs)
+        # else:
+        #     with Pool(nprocs) as pool:
+        #         res = list(pool.imap(tmp_f, chunks))
+
         if ptqdm_available:
             # Display progress bar if available
             res = p_imap(tmp_f, chunks, num_cpus=nprocs)
         else:
-            with Pool(nprocs) as pool:
-                res = list(pool.imap(tmp_f, chunks))
+            # Sequential processing
+            res = [tmp_f(chunk) for chunk in chunks]
+
+
 
         self.results = self._collect_results(res)
 
@@ -425,7 +433,7 @@ class ProblemSpec(dict):
 
             res = func(self, Y=self._results)
         else:
-            max_procs = cpu_count()
+            max_procs = 1
             if nprocs is None:
                 nprocs = max_procs
             else:
@@ -439,13 +447,21 @@ class ProblemSpec(dict):
                     num_cpus=nprocs,
                 )
             else:
-                with Pool(nprocs) as pool:
-                    res = list(
-                        pool.imap(
-                            lambda y: func(self, Y=y),
-                            [self._results[:, i] for i in range(Yn)],
-                        )
-                    )
+                # with Pool(nprocs) as pool:
+                #     res = list(
+                #         pool.imap(
+                #             lambda y: func(self, Y=y),
+                #             [self._results[:, i] for i in range(Yn)],
+                #         )
+                #     )
+
+                res = []
+                for i in range(Yn):
+                    y = self._results[:, i]
+                    result = func(self, Y=y)
+                    res.append(result)
+
+
 
         # Assign by output name if more than 1 output, otherwise
         # attach directly
